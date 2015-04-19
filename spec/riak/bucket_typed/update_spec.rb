@@ -1,39 +1,35 @@
 require 'spec_helper'
 require 'riak/bucket_typed/bucket'
 
-describe Riak::BucketTyped::Bucket, test_client: true do
-  let(:client){ test_client }
+describe Riak::BucketTyped::Bucket do
+  before(:all){ Riak::Client::BeefcakeProtobuffsBackend.configured? }
+
+  let(:client_id){ Riak::Client::MAX_CLIENT_ID - 1 }
+  let(:client){ Riak::Client.allocate }
+  let(:type){ client.bucket_type 'type' }
+
   let(:key1){ "key1" }
   let(:data1){ [1,2,3] }
   let(:data2){ [1,2,3,4] }
 
+  let(:node){ double(:node, host: "dummy1", pb_port: 10017) }
+  let(:backend){ Riak::Client::BeefcakeProtobuffsBackend.new(client, node) }
+
   before do
+    allow(client).to receive(:client_id).and_return(client_id)
+    allow(client).to receive(:backend).and_yield(backend)
+    expect(backend).to receive(:prune_unsupported_options).with(:PutReq, {:returnbody=>true, :type=>"bucket_type1", :return_body=>true}).
+      and_return({:returnbody=>true, :type=>"bucket_type1", :return_body=>true})
     @bucket_type1 = client.bucket_type("bucket_type1")
-    bucket1 = @bucket_type1.bucket("bucket1")
-    begin
-      bucket1.keys.each{|key| bucket1.delete(key)}
-    rescue => e
-      raise unless e.message =~ /No bucket-type named 'bucket_type1'/
-    end
     @bucket1 = @bucket_type1.bucket("bucket1")
-    @robject1 = @bucket1.new(key1)
-    @robject1.data = data1
-    @robject1.store # failed to store because @bucket_typ1 is not activated
   end
 
   it "get stored object" do
-    obj = @bucket1.get(key1)
-    expect(obj.data).to eq data1
-  end
-
-  it "get and update" do
-    obj1 = @bucket1.get(key1)
-    obj1.data = data2
-    obj1.store
-    
-    obj2 = @bucket1.get(key1)
-    expect(obj2.data).to eq data2
-    expect(obj2.bucket.type).to eq @bucket1.type
+    expect(Riak::Client::BeefcakeProtobuffsBackend::RpbPutReq).to\
+    receive(:new).with({}).and_call_original
+    @robject1 = @bucket1.new(key1)
+    @robject1.data = data1
+    @robject1.store
   end
 
 end
